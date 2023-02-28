@@ -1,6 +1,7 @@
 import { create } from "venom-bot";
 import * as dotenv from "dotenv";
 import { Configuration, OpenAIApi } from "openai";
+import axios from "axios";
 
 dotenv.config();
 
@@ -30,7 +31,7 @@ const getDavinciResponse = async (clientText) => {
 
   try {
     const response = await openai.createCompletion(options);
-    console.log("response",response);
+    console.log("response", response);
     let botResponse = "";
     response.data.choices.forEach(({ text }) => {
       botResponse += text;
@@ -62,13 +63,15 @@ const commands = (client, message) => {
   const iaCommands = {
     davinci3: "/bot",
     dalle: "/img",
+    poke: "/poke",
+    pokeList: "/pokeList",
   };
 
   let firstWord = message.text.substring(0, message.text.indexOf(" "));
+  const question = message.text.substring(message.text.indexOf(" "));
 
   switch (firstWord) {
     case iaCommands.davinci3:
-      const question = message.text.substring(message.text.indexOf(" "));
       getDavinciResponse(question).then((response) => {
         /*
          * Faremos uma validação no message.from
@@ -84,6 +87,56 @@ const commands = (client, message) => {
       });
       break;
 
+    case iaCommands.poke:
+      getAndSendPokemonData(client, message, question);
+
+      // console.log(message.text);
+      // console.log(
+      //   "iaCommands.poke",
+      //   message.text.substring(message.text.indexOf(" "))
+      // );
+
+      // try {
+      //   const response = axios.get("https://pokeapi.co/api/v2/pokemon/pikachu");
+
+      //   const data = response.data;
+
+      //   console.log(" response", response);
+      // } catch (error) {
+      //   console.log("error", error);
+      // }
+
+      // const response = axios.get("https://pokeapi.co/api/v2/pokemon/pikachu");
+
+      // const pokeData = message.text.substring(message.text.indexOf(" "));
+      // const response = axios.get(
+      //   `https://pokeapi.co/api/v2/pokemon/${message.text.substring(
+      //     message.text.indexOf(" ")
+      //   )}`
+      //   // "https://pokeapi.co/api/v2/pokemon/pikachu"
+      // );
+
+      // Baixar a imagem do front_default
+
+      // const imageResponse = fetch(data.sprites.front_default);
+      // const imageData = imageResponse.buffer();
+      // const base64ImageData = imageData.toString("base64");
+      // console.log("imageResponse", imageResponse);
+      // console.log("imageData", imageData);
+
+      // const messageText = `Nome: ${data.name}\nTipo: ${data.types[0].type.name}`;
+
+      // client.sendText(message.from, messageText);
+
+      // const sticker = client.sendImageAsSticker(
+      //   message.from,
+      //   `data:image/png;base64,${base64ImageData}`,
+      //   { author: "PokeAPI" },
+      //   { pack: "Pokemons", keepScale: true }
+      // );
+
+      break;
+
     case iaCommands.dalle:
       const imgDescription = message.text.substring(message.text.indexOf(" "));
       getDalleResponse(imgDescription, message).then((imgUrl) => {
@@ -95,9 +148,76 @@ const commands = (client, message) => {
         );
       });
       break;
+
+    case iaCommands.pokeList:
+      getAndSendPokemonList(client, message);
+
+      break;
   }
 };
+
+async function getAndSendPokemonData(client, message, question) {
+  try {
+    // const pokeData = message.text.substring(message.text.indexOf(" "));
+    console.log("question", question);
+    console.log("message", message);
+    // const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${message.text.substring(message.text.indexOf(" "))}`);
+    const response = await axios.get(
+      `https://pokeapi.co/api/v2/pokemon/${question.trim()}`
+    );
+    const data = response.data;
+    console.log("response.data", response.data);
+
+    const imageResponse = await axios.get(data.sprites.front_default, {
+      responseType: "arraybuffer",
+    });
+    const base64ImageData = Buffer.from(imageResponse.data, "binary").toString(
+      "base64"
+    );
+
+    const messageText = `Nome: ${data.name}\nTipo: ${data.types[0].type.name}`;
+
+    const sticker = await client.sendImageAsSticker(
+      message.from,
+      `data:image/png;base64,${base64ImageData}`,
+      { author: "PokeAPI" },
+      { pack: "Pokemons", keepScale: true }
+    );
+
+    await client.sendText(message.from, messageText);
+  } catch (error) {
+    console.log("error", error);
+    await client.sendText(
+      message.from,
+      `Ocorreu um erro ao obter as informações do Pokemon: ${error.message}`
+    );
+  }
+}
+
+async function getAndSendPokemonList(client, message) {
+  try {
+    // Faz a requisição na PokeAPI para obter a lista de Pokemons
+    const response = await axios.get("https://pokeapi.co/api/v2/pokemon");
+    const pokemonList = response.data.results;
+    const pokemonNames = pokemonList.map((pokemon) => pokemon.name).join("\n");
+    const messageBody = `Lista de Pokemons:\n${pokemonNames}`;
+
+    // Envia a lista de Pokemons como mensagem no mesmo grupo
+    await client.reply(message.from, messageBody, message.id.toString());
+  } catch (error) {
+    console.log(error);
+  }
+}
+
+// e substituir a chamada da função na parte de "commands" por:
+
+// case iaCommands.poke:
+//   getAndSendPokemonData(client, message);
+//   break;
 
 async function start(client) {
   client.onAnyMessage((message) => commands(client, message));
 }
+// async function start(client) {
+//   client.onAnyMessage((message) => commands(client, message));
+// }
